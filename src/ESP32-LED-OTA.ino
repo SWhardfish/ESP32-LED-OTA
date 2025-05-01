@@ -21,7 +21,6 @@ unsigned long fadeDurationOn = 2000;   // 2 seconds
 unsigned long fadeDurationOff = 30000; // 30 seconds
 unsigned long lastMotionTime = 0;
 const unsigned long holdTime = 300000;
-int previousBrightness = 0;  // Start with valid brightness level
 
 // Web and NTP
 WebServer server(80);
