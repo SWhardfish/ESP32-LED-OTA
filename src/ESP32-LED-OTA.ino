@@ -11,7 +11,7 @@
 #include <LittleFS.h>
 #include <DNSServer.h>
 
-// LED strip settingsX
+// LED strip settings
 #define LED_PIN 6
 #define NUM_LEDS 61
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
