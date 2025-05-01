@@ -25,7 +25,7 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 // Motion hold
 unsigned long lastMotionTime = 0;
-const unsigned long holdTime = 30000;
+const unsigned long holdTime = 300000;
 
 // Web and NTP
 WebServer server(80);
