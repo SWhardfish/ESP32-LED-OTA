@@ -10,22 +10,20 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <DNSServer.h>
+#include <time.h>
 
-// LED strip settings
 #define LED_PIN 6
 #define NUM_LEDS 61
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
-
-// PIR sensor
 #define PIR_PIN 7
-
-// Brightness levels
 #define BRIGHTNESS_LOW 20
 #define BRIGHTNESS_HIGH 180
-
-// Motion hold
+unsigned long fadeDurationOn = 2000;   // 2 seconds
+unsigned long fadeDurationOff = 30000; // 30 seconds
 unsigned long lastMotionTime = 0;
 const unsigned long holdTime = 300000;
+int previousBrightness = 0;  // Start with valid brightness level
+
 
 // Web and NTP
 WebServer server(80);
@@ -58,20 +56,45 @@ DNSServer dnsServer;
 const byte DNS_PORT = 53;
 
 void logEvent(String event) {
-  String timestamp = timeClient.getFormattedTime();
-  String entry = timestamp + " - " + event;
+  time_t now = time(nullptr);
+  struct tm* ptm = localtime(&now);
+  char timeStr[9];
+  sprintf(timeStr, "%02d:%02d:%02d", ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
+  String entry = String(timeStr) + " - " + event;
   logBuffer[logIndex] = entry;
   logIndex = (logIndex + 1) % LOG_BUFFER_SIZE;
   Serial.println(entry);
 }
 
-void setWhiteBrightness(uint8_t brightness) {
-  strip.setBrightness(brightness);
+void fadeToWhiteBrightness(uint8_t targetBrightness, unsigned long duration) {
+  if (targetBrightness == 0) {
+    strip.clear();              // Turn off all pixels
+    strip.show();               // Apply the change
+    previousBrightness = 0;
+    return;
+  }
+
+  int start = previousBrightness;
+  int delta = targetBrightness - start;
+  unsigned long startTime = millis();
+
+  while (millis() - startTime < duration) {
+    float progress = float(millis() - startTime) / duration;
+    int current = start + delta * progress;
+    strip.setBrightness(current);
+    for (int i = 0; i < NUM_LEDS; i++) {
+      strip.setPixelColor(i, strip.Color(0, 0, 0, 255));
+    }
+    strip.show();
+    delay(20);
+  }
+
+  strip.setBrightness(targetBrightness);
   for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, strip.Color(0, 0, 0, 255)); // Only white LED
+    strip.setPixelColor(i, strip.Color(0, 0, 0, 255));
   }
   strip.show();
-  previousBrightness = brightness;
+  previousBrightness = targetBrightness;
 }
 
 void turnOffStrip() {
@@ -210,7 +233,7 @@ void setup() {
 
   pinMode(PIR_PIN, INPUT);
   strip.begin();
-  setWhiteBrightness(BRIGHTNESS_LOW);
+  fadeToWhiteBrightness(BRIGHTNESS_LOW, fadeDurationOn);
 
   if (!loadWiFiConfig() || !connectWiFi()) {
     Serial.println("WiFi failed. Starting AP mode.");
@@ -219,7 +242,7 @@ void setup() {
   }
 
   Serial.println("WiFi connected.");
-  timeClient.begin();
+  configTzTime("CET-1CEST,M3.5.0/02,M10.5.0/03", "pool.ntp.org");
   fetchSunsetHour();
 
   server.on("/", handleRoot);
@@ -232,14 +255,13 @@ void setup() {
 void loop() {
   server.handleClient();
   dnsServer.processNextRequest();
-  timeClient.update();
 
   static bool motionActive = false;
   bool motionDetected = digitalRead(PIR_PIN);
   unsigned long now = millis();
 
-  time_t rawTime = timeClient.getEpochTime();
-  struct tm *ptm = gmtime(&rawTime);
+  time_t rawTime =  time(nullptr);
+  struct tm *ptm = localtime(&rawTime);
   int hour = ptm->tm_hour;
   int minute = ptm->tm_min;
   bool isScheduledOn = (hour >= 6 && hour < 9) || (hour >= sunsetHour && (hour < 23 || (hour == 23 && minute < 30)));
@@ -248,7 +270,7 @@ void loop() {
     motionActive = true;
     lastMotionTime = now;
     if (currentState != HIGH_STATE) {
-      setWhiteBrightness(BRIGHTNESS_HIGH);
+      fadeToWhiteBrightness(BRIGHTNESS_HIGH, fadeDurationOn);
       currentState = HIGH_STATE;
       logEvent("Motion detected. Light turned ON to 75% brightness.");
     }
@@ -257,15 +279,21 @@ void loop() {
   if (!motionDetected && motionActive && now - lastMotionTime > holdTime) {
     motionActive = false;
     if (isScheduledOn && currentState != LOW_STATE) {
-      setWhiteBrightness(BRIGHTNESS_LOW);
+      fadeToWhiteBrightness(BRIGHTNESS_LOW, fadeDurationOn);
       currentState = LOW_STATE;
       logEvent("No motion detected. Light turned ON to 10% brightness.");
     } else if (!isScheduledOn && currentState != OFF_STATE) {
-      turnOffStrip();
+      fadeToWhiteBrightness(0, fadeDurationOff);
       currentState = OFF_STATE;
       logEvent("No motion detected. Light turned OFF.");
     }
   }
+  static bool wasScheduledOn = false;
+  if (isScheduledOn != wasScheduledOn) {
+    wasScheduledOn = isScheduledOn;
+    logEvent(isScheduledOn ? "Schedule activated." : "Schedule deactivated.");
+  }
+
 
   delay(100);
 }
