@@ -3,10 +3,10 @@ name: Build ESP32 Firmware
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'  # Triggers on tags like v1.0.0, v1.2.3, etc.
 
 permissions:
-  contents: write
+  contents: write  # Required for creating releases and uploading files
 
 jobs:
   build:
@@ -44,3 +44,5 @@ jobs:
           name: Firmware ${{ github.ref }}
           body: Auto-built firmware from tag.
           files: .pio/build/esp32dev/firmware.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

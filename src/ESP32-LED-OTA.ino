@@ -114,7 +114,7 @@ void handleRoot() {
 void handleOTAUpdate() {
   server.send(200, "text/plain", "Starting OTA update...");
   delay(1000);
-  performOTA("https://github.com/SWhardfish/ESP32-LED-OTA/releases/latest/download/firmware.bin");
+  performOTA("https://raw.githubusercontent.com/SWhardfish/ESP32-LED-OTA/main/ESP32-LED-OTA.bin");
 }
 
 void performOTA(const char* binURL) {
