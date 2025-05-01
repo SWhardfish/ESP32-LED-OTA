@@ -1,7 +1,6 @@
 #include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <NTPClient.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -24,11 +23,8 @@ unsigned long lastMotionTime = 0;
 const unsigned long holdTime = 300000;
 int previousBrightness = 0;  // Start with valid brightness level
 
-
 // Web and NTP
 WebServer server(80);
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // GMT+2
 
 // Sunset time
 int sunsetHour = 18;
