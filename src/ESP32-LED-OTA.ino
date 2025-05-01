@@ -9,8 +9,8 @@
 #include <Update.h>
 
 // WiFi credentials
-const char* ssid = "Policarpa";
-const char* password = "Almita1056";
+const char* ssid = "";
+const char* password = "";
 
 // NTP Client
 WiFiUDP ntpUDP;
