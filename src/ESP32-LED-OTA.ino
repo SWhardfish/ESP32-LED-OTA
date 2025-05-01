@@ -11,7 +11,7 @@
 #include <LittleFS.h>
 #include <DNSServer.h>
 
-// LED strip settings
+// LED strip settingsX
 #define LED_PIN 6
 #define NUM_LEDS 61
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
@@ -20,12 +20,12 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 #define PIR_PIN 7
 
 // Brightness levels
-#define BRIGHTNESS_LOW 25    // 10%
-#define BRIGHTNESS_HIGH 191  // 75%
+#define BRIGHTNESS_LOW 20
+#define BRIGHTNESS_HIGH 180
 
 // Motion hold
 unsigned long lastMotionTime = 0;
-const unsigned long holdTime = 60000;
+const unsigned long holdTime = 30000;
 
 // Web and NTP
 WebServer server(80);

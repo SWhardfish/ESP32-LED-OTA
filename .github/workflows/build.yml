@@ -41,5 +41,3 @@ jobs:
           name: Firmware ${{ github.ref }}
           body: Auto-built firmware from tag.
           files: .pio/build/esp32dev/firmware.bin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
