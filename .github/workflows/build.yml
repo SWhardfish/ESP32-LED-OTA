@@ -3,10 +3,10 @@ name: Build ESP32 Firmware
 on:
   push:
     tags:
-      - 'v*'  # Triggers on tags like v1.0.0, v1.2.3, etc.
+      - 'v*'
 
 permissions:
-  contents: write  # Required for creating releases and uploading files
+  contents: write  # Required to create releases and upload files
 
 jobs:
   build:
@@ -20,7 +20,6 @@ jobs:
         id: extract_version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          echo "Extracted version: $VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Install PlatformIO
@@ -31,18 +30,17 @@ jobs:
         env:
           PLATFORMIO_BUILD_FLAGS: -D VERSION=\"${{ env.VERSION }}\"
 
-      - name: Upload Firmware Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ESP32-Firmware
-          path: .pio/build/esp32dev/firmware.bin
+      - name: Rename Firmware for OTA
+        run: cp .pio/build/esp32dev/firmware.bin ESP32-LED-OTA.bin
 
-      - name: Create GitHub Release
+      - name: Upload Firmware as Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
           name: Firmware ${{ github.ref }}
           body: Auto-built firmware from tag.
-          files: .pio/build/esp32dev/firmware.bin
+          files: |
+            .pio/build/esp32dev/firmware.bin
+            ESP32-LED-OTA.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
