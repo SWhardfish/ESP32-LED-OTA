@@ -7,16 +7,11 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <FS.h>
+#include <LittleFS.h>
+#include <DNSServer.h>
 
-// WiFi credentials
-const char* ssid = "";
-const char* password = "";
-
-// NTP Client
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // GMT+2 for Stockholm (summer time)
-
-// LED strip settings
+// LED strip settingsx
 #define LED_PIN 6
 #define NUM_LEDS 61
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
@@ -30,13 +25,15 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 // Motion hold
 unsigned long lastMotionTime = 0;
-const unsigned long holdTime = 60000; // 60 seconds
+const unsigned long holdTime = 60000;
 
-// Sunset hour (dynamic)
-int sunsetHour = 18; // default fallback
-
-// Web server
+// Web and NTP
 WebServer server(80);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // GMT+2
+
+// Sunset time
+int sunsetHour = 18;
 
 // Logging
 #define LOG_BUFFER_SIZE 50
@@ -45,6 +42,20 @@ int logIndex = 0;
 
 // State tracking
 int previousBrightness = -1;
+enum LightState { OFF_STATE, LOW_STATE, HIGH_STATE };
+LightState currentState = OFF_STATE;
+
+// Wi-Fi config
+struct WiFiConfig {
+  String ssid;
+  String password;
+};
+
+WiFiConfig wifiConfig;
+
+// Captive portal
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
 
 void logEvent(String event) {
   String timestamp = timeClient.getFormattedTime();
@@ -73,26 +84,18 @@ void fetchSunsetHour() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure(); // Skip TLS validation (not secure for production)
+    client.setInsecure();
 
-    String url = "https://api.sunrise-sunset.org/json?lat=59.3293&lng=18.0686&formatted=0";
-    http.begin(client, url);
-    int httpCode = http.GET();
-
-    if (httpCode == 200) {
-      String payload = http.getString();
+    http.begin(client, "https://api.sunrise-sunset.org/json?lat=59.3293&lng=18.0686&formatted=0");
+    int code = http.GET();
+    if (code == 200) {
       DynamicJsonDocument doc(1024);
-      DeserializationError err = deserializeJson(doc, payload);
-      if (!err) {
-        String sunsetTime = doc["results"]["sunset"]; // Format: "2024-05-01T18:37:00+00:00"
-        int hourUTC = sunsetTime.substring(11, 13).toInt();
-        sunsetHour = (hourUTC + 2) % 24; // Stockholm summer time = UTC+2
-        logEvent("Sunset time updated from API: " + String(sunsetHour) + ":00");
-      } else {
-        logEvent("JSON parse error on sunset time.");
-      }
-    } else {
-      logEvent("Failed to fetch sunset time. HTTP code: " + String(httpCode));
+      deserializeJson(doc, http.getString());
+      String sunset = doc["results"]["sunset"];
+      int hourUTC = sunset.substring(11, 13).toInt();
+      int minuteUTC = sunset.substring(14, 16).toInt();
+      sunsetHour = (hourUTC + 2) % 24; // UTC+2 Stockholm
+      logEvent("Sunset time: " + String(sunsetHour) + ":" + String(minuteUTC));
     }
     http.end();
   }
@@ -102,9 +105,7 @@ void handleRoot() {
   String html = "<html><body><h1>Event Log</h1><ul>";
   for (int i = 0; i < LOG_BUFFER_SIZE; i++) {
     int index = (logIndex - 1 - i + LOG_BUFFER_SIZE) % LOG_BUFFER_SIZE;
-    if (logBuffer[index].length() > 0) {
-      html += "<li>" + logBuffer[index] + "</li>";
-    }
+    if (logBuffer[index].length()) html += "<li>" + logBuffer[index] + "</li>";
   }
   html += "</ul></body></html>";
   server.send(200, "text/html", html);
@@ -119,56 +120,107 @@ void handleOTAUpdate() {
 void performOTA(const char* binURL) {
   WiFiClientSecure client;
   client.setInsecure();
-
   HTTPClient http;
   http.begin(client, binURL);
   int httpCode = http.GET();
-
   if (httpCode == HTTP_CODE_OK) {
     int contentLength = http.getSize();
-    bool canBegin = Update.begin(contentLength);
-    if (canBegin) {
+    if (Update.begin(contentLength)) {
       WiFiClient* stream = http.getStreamPtr();
       size_t written = Update.writeStream(*stream);
-      if (written == contentLength) {
-        logEvent("OTA update written. Rebooting.");
-        if (Update.end(true)) {
-          ESP.restart();
-        } else {
-          logEvent("OTA failed: " + String(Update.getError()));
-        }
+      if (written == contentLength && Update.end(true)) {
+        logEvent("OTA complete. Restarting.");
+        ESP.restart();
       } else {
-        logEvent("OTA incomplete. " + String(written) + "/" + String(contentLength));
+        logEvent("OTA failed.");
         Update.end();
       }
-    } else {
-      logEvent("Not enough space for OTA.");
     }
   } else {
-    logEvent("OTA download failed. HTTP code: " + String(httpCode));
+    logEvent("OTA HTTP error: " + String(httpCode));
   }
   http.end();
 }
 
+bool loadWiFiConfig() {
+  File f = LittleFS.open("/config.json", "r");
+  if (!f) return false;
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, f);
+  f.close();
+  if (error) return false;
+  wifiConfig.ssid = doc["ssid"].as<String>();
+  wifiConfig.password = doc["password"].as<String>();
+  return true;
+}
+
+void saveWiFiConfig(String ssid, String pass) {
+  DynamicJsonDocument doc(256);
+  doc["ssid"] = ssid;
+  doc["password"] = pass;
+  File f = LittleFS.open("/config.json", "w");
+  if (f) {
+    serializeJson(doc, f);
+    f.close();
+  }
+}
+
+void startAPMode() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("ESP32-Setup");
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+
+  server.on("/", []() {
+    String html = "<form action='/save' method='POST'>"
+                  "SSID: <input name='ssid'><br>"
+                  "Password: <input name='pass'><br>"
+                  "<input type='submit'></form>";
+    server.send(200, "text/html", html);
+  });
+
+  server.on("/save", []() {
+    String ssid = server.arg("ssid");
+    String pass = server.arg("pass");
+    if (ssid.length()) {
+      saveWiFiConfig(ssid, pass);
+      server.send(200, "text/html", "<p>Saved. Rebooting...</p>");
+      delay(1000);
+      ESP.restart();
+    } else {
+      server.send(400, "text/plain", "SSID is required");
+    }
+  });
+
+  server.begin();
+}
+
+bool connectWiFi() {
+  WiFi.begin(wifiConfig.ssid.c_str(), wifiConfig.password.c_str());
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(500);
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-
-  timeClient.begin();
-
-  fetchSunsetHour(); // Get dynamic sunset time
-
-  strip.begin();
-  setWhiteBrightness(BRIGHTNESS_LOW); // Default to 10%
+  LittleFS.begin();
 
   pinMode(PIR_PIN, INPUT);
+  strip.begin();
+  setWhiteBrightness(BRIGHTNESS_LOW);
+
+  if (!loadWiFiConfig() || !connectWiFi()) {
+    Serial.println("WiFi failed. Starting AP mode.");
+    startAPMode();
+    return;
+  }
+
+  Serial.println("WiFi connected.");
+  timeClient.begin();
+  fetchSunsetHour();
 
   server.on("/", handleRoot);
   server.on("/update", handleOTAUpdate);
@@ -177,24 +229,19 @@ void setup() {
   logEvent("System initialized.");
 }
 
-// State tracking
-enum LightState { OFF_STATE, LOW_STATE, HIGH_STATE };
-LightState currentState = OFF_STATE;
-
 void loop() {
-  timeClient.update();
   server.handleClient();
+  dnsServer.processNextRequest();
+  timeClient.update();
 
-  unsigned long now = millis();
-  static unsigned long lastUpdate = 0;
   static bool motionActive = false;
-
   bool motionDetected = digitalRead(PIR_PIN);
-  unsigned long currentTime = timeClient.getEpochTime();
-  struct tm *ptm = gmtime((time_t *)&currentTime);
+  unsigned long now = millis();
+
+  time_t rawTime = timeClient.getEpochTime();
+  struct tm *ptm = gmtime(&rawTime);
   int hour = ptm->tm_hour;
   int minute = ptm->tm_min;
-
   bool isScheduledOn = (hour >= 6 && hour < 9) || (hour >= sunsetHour && (hour < 23 || (hour == 23 && minute < 30)));
 
   if (motionDetected) {
@@ -207,24 +254,18 @@ void loop() {
     }
   }
 
-  // Handle no motion
   if (!motionDetected && motionActive && now - lastMotionTime > holdTime) {
     motionActive = false;
-    if (isScheduledOn) {
-      if (currentState != LOW_STATE) {
-        setWhiteBrightness(BRIGHTNESS_LOW);
-        currentState = LOW_STATE;
-        logEvent("No motion detected. Light turned ON to 10% brightness.");
-      }
-    } else {
-      if (currentState != OFF_STATE) {
-        turnOffStrip();
-        currentState = OFF_STATE;
-        logEvent("No motion detected. Light turned OFF.");
-      }
+    if (isScheduledOn && currentState != LOW_STATE) {
+      setWhiteBrightness(BRIGHTNESS_LOW);
+      currentState = LOW_STATE;
+      logEvent("No motion detected. Light turned ON to 10% brightness.");
+    } else if (!isScheduledOn && currentState != OFF_STATE) {
+      turnOffStrip();
+      currentState = OFF_STATE;
+      logEvent("No motion detected. Light turned OFF.");
     }
   }
 
   delay(100);
 }
-
