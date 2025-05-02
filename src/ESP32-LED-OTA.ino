@@ -139,6 +139,7 @@ void performOTA(const char* binURL) {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
   http.begin(client, binURL);
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
