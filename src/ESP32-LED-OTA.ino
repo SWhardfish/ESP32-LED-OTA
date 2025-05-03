@@ -29,8 +29,6 @@ const unsigned long holdTime = 300000;
 #endif
 const char* current_version = VERSION_TAG;
 
- //void performOTA(const char* binURL);
-
 // Web and NTP
 WebServer server(80);
 
