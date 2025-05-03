@@ -27,6 +27,8 @@ const unsigned long holdTime = 300000;
 #endif
 const char* current_version = VERSION_TAG;
 
+ void performOTA(const char* binURL);
+
 // Web and NTP
 WebServer server(80);
 
@@ -77,9 +79,6 @@ void fadeToWhiteBrightness(uint8_t targetBrightness, unsigned long duration) {
   int start = previousBrightness;
   int delta = targetBrightness - start;
   unsigned long startTime = millis();
-
-  void performOTA(const char* binURL);
-
 
   while (millis() - startTime < duration) {
     float progress = float(millis() - startTime) / duration;
@@ -157,7 +156,7 @@ void handleOTAUpdate() {
     return;
   }
 
-  DynamicJsonDocument doc(2048);
+  sonDocument doc(2048);
   DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
 
