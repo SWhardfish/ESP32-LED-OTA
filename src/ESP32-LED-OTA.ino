@@ -114,7 +114,7 @@ void fetchSunsetHour() {
     http.begin(client, "https://api.sunrise-sunset.org/json?lat=59.3293&lng=18.0686&formatted=0");
     int code = http.GET();
     if (code == 200) {
-      JsonDocument doc(1024);
+      StaticJsonDocument doc(1024);
       deserializeJson(doc, http.getString());
       String sunset = doc["results"]["sunset"];
       int hourUTC = sunset.substring(11, 13).toInt();
@@ -156,7 +156,7 @@ void handleOTAUpdate() {
     return;
   }
 
-  JsonDocument doc(2048);
+  DynamicJsonDocument doc(2048);
   DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
 
@@ -199,7 +199,7 @@ void checkForOTAUpdate() {
     return;
   }
 
-  JsonDocument doc(2048);
+  DynamicJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, http.getStream());
   http.end();
 
@@ -262,7 +262,7 @@ void applyFirmwareUpdate(const char* firmwareURL) {
 bool loadWiFiConfig() {
   File f = LittleFS.open("/config.json", "r");
   if (!f) return false;
-  JsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, f);
   f.close();
   if (error) return false;
@@ -272,7 +272,7 @@ bool loadWiFiConfig() {
 }
 
 void saveWiFiConfig(String ssid, String pass) {
-  JsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   doc["ssid"] = ssid;
   doc["password"] = pass;
   File f = LittleFS.open("/config.json", "w");
