@@ -26,9 +26,11 @@ jobs:
         run: pip install platformio
 
       - name: Build Firmware
-        run: platformio run --environment esp32dev
+        run: |
+          echo "VERSION=${VERSION}"  # Optional: debug output
+          platformio run --environment esp32dev
         env:
-          PLATFORMIO_BUILD_FLAGS: -D VERSION=\"${{ env.VERSION }}\"
+          VERSION: ${{ env.VERSION }}
 
       - name: Rename Firmware for OTA
         run: cp .pio/build/esp32dev/firmware.bin ESP32-LED-OTA.bin

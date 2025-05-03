@@ -22,6 +22,11 @@ unsigned long fadeDurationOff = 30000; // 30 seconds
 unsigned long lastMotionTime = 0;
 const unsigned long holdTime = 300000;
 
+#ifndef VERSION_TAG
+#define VERSION_TAG "unknown"
+#endif
+const char* current_version = VERSION_TAG;
+
 // Web and NTP
 WebServer server(80);
 
@@ -130,34 +135,123 @@ void handleRoot() {
 }
 
 void handleOTAUpdate() {
-  server.send(200, "text/plain", "Starting OTA update...");
-  delay(1000);
-  performOTA("https://github.com/SWhardfish/ESP32-LED-OTA/releases/latest/download/ESP32-LED-OTA.bin");
-}
+  if (WiFi.status() != WL_CONNECTED) {
+    server.send(500, "text/plain", "WiFi not connected");
+    return;
+  }
 
-void performOTA(const char* binURL) {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
-  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  http.begin(client, binURL);
+  http.begin(client, "https://api.github.com/repos/SWhardfish/ESP32-LED-OTA/releases/latest");
+  http.addHeader("User-Agent", "ESP32-OTA");  // GitHub API requires a User-Agent
+
   int httpCode = http.GET();
-  if (httpCode == HTTP_CODE_OK) {
-    int contentLength = http.getSize();
-    if (Update.begin(contentLength)) {
-      WiFiClient* stream = http.getStreamPtr();
-      size_t written = Update.writeStream(*stream);
-      if (written == contentLength && Update.end(true)) {
-        logEvent("OTA complete. Restarting.");
-        ESP.restart();
-      } else {
-        logEvent("OTA failed.");
-        Update.end();
-      }
-    }
-  } else {
-    logEvent("OTA HTTP error: " + String(httpCode));
+  if (httpCode != HTTP_CODE_OK) {
+    logEvent("Failed to fetch latest version. HTTP code: " + String(httpCode));
+    server.send(500, "text/plain", "Failed to fetch version");
+    http.end();
+    return;
   }
+
+  DynamicJsonDocument doc(2048);
+  DeserializationError err = deserializeJson(doc, http.getString());
+  http.end();
+
+  if (err) {
+    logEvent("JSON parse error");
+    server.send(500, "text/plain", "Failed to parse JSON");
+    return;
+  }
+
+  String latestVersion = doc["tag_name"].as<String>();
+  logEvent("Current: " + String(current_version) + ", Latest: " + latestVersion);
+
+  if (String(current_version) == latestVersion) {
+    logEvent("Already up to date.");
+    server.send(200, "text/plain", "Already up to date.");
+    return;
+  }
+
+  server.send(200, "text/plain", "Updating to " + latestVersion);
+  delay(1000);
+  String binURL = "https://github.com/SWhardfish/ESP32-LED-OTA/releases/download/" + latestVersion + "/ESP32-LED-OTA.bin";
+  performOTA(binURL.c_str());
+}
+
+
+void checkForOTAUpdate() {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.begin(client, "https://api.github.com/repos/SWhardfish/ESP32-LED-OTA/releases/latest");
+  http.setUserAgent("ESP32-OTA-Updater"); // Required by GitHub API
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    logEvent("Failed to fetch release info. HTTP code: " + String(httpCode));
+    http.end();
+    return;
+  }
+
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, http.getStream());
+  http.end();
+
+  if (error) {
+    logEvent("Failed to parse release info.");
+    return;
+  }
+
+  String latest_version = doc["tag_name"].as<String>();
+  String firmware_url = doc["assets"][0]["browser_download_url"].as<String>();
+
+  logEvent("Latest version: " + latest_version);
+  logEvent("Current version: " + String(current_version));
+  logEvent("Firmware URL: " + firmware_url);
+
+  if (latest_version == current_version) {
+    logEvent("Already up to date.");
+    return;
+  }
+
+  logEvent("Downloading firmware...");
+  applyFirmwareUpdate(firmware_url.c_str());
+}
+
+void applyFirmwareUpdate(const char* firmwareURL) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.begin(client, firmwareURL);
+  int httpCode = http.GET();
+
+  if (httpCode != HTTP_CODE_OK) {
+    logEvent("Firmware download failed. HTTP code: " + String(httpCode));
+    http.end();
+    return;
+  }
+
+  int contentLength = http.getSize();
+  if (!Update.begin(contentLength)) {
+    logEvent("Not enough space for update.");
+    http.end();
+    return;
+  }
+
+  WiFiClient* stream = http.getStreamPtr();
+  size_t written = Update.writeStream(*stream);
+
+  if (written == contentLength && Update.end(true)) {
+    logEvent("OTA update complete. Restarting...");
+    ESP.restart();
+  } else {
+    logEvent("OTA update failed.");
+    Update.end();
+  }
+
   http.end();
 }
 
