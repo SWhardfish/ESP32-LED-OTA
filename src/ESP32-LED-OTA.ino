@@ -10,6 +10,8 @@
 #include <LittleFS.h>
 #include <DNSServer.h>
 #include <time.h>
+#include "OTAUpdate.h"
+
 
 #define LED_PIN 6
 #define NUM_LEDS 61
@@ -27,7 +29,7 @@ const unsigned long holdTime = 300000;
 #endif
 const char* current_version = VERSION_TAG;
 
- void performOTA(const char* binURL);
+ //void performOTA(const char* binURL);
 
 // Web and NTP
 WebServer server(80);
