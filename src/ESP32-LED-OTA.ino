@@ -10,8 +10,6 @@
 #include <LittleFS.h>
 #include <DNSServer.h>
 #include <time.h>
-#include "OTAUpdate.h"
-
 
 #define LED_PIN 6
 #define NUM_LEDS 61
@@ -180,48 +178,7 @@ void handleOTAUpdate() {
   server.send(200, "text/plain", "Updating to " + latestVersion);
   delay(1000);
   String binURL = "https://github.com/SWhardfish/ESP32-LED-OTA/releases/download/" + latestVersion + "/ESP32-LED-OTA.bin";
-  performOTA(binURL.c_str());
-}
-
-
-void checkForOTAUpdate() {
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  HTTPClient http;
-  http.begin(client, "https://api.github.com/repos/SWhardfish/ESP32-LED-OTA/releases/latest");
-  http.setUserAgent("ESP32-OTA-Updater"); // Required by GitHub API
-
-  int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK) {
-    logEvent("Failed to fetch release info. HTTP code: " + String(httpCode));
-    http.end();
-    return;
-  }
-
-  StaticJsonDocument<2048> doc;
-  DeserializationError error = deserializeJson(doc, http.getStream());
-  http.end();
-
-  if (error) {
-    logEvent("Failed to parse release info.");
-    return;
-  }
-
-  String latest_version = doc["tag_name"].as<String>();
-  String firmware_url = doc["assets"][0]["browser_download_url"].as<String>();
-
-  logEvent("Latest version: " + latest_version);
-  logEvent("Current version: " + String(current_version));
-  logEvent("Firmware URL: " + firmware_url);
-
-  if (latest_version == current_version) {
-    logEvent("Already up to date.");
-    return;
-  }
-
-  logEvent("Downloading firmware...");
-  applyFirmwareUpdate(firmware_url.c_str());
+  applyFirmwareUpdate(binURL.c_str());
 }
 
 void applyFirmwareUpdate(const char* firmwareURL) {
@@ -387,7 +344,6 @@ void loop() {
     wasScheduledOn = isScheduledOn;
     logEvent(isScheduledOn ? "Schedule activated." : "Schedule deactivated.");
   }
-
 
   delay(100);
 }
