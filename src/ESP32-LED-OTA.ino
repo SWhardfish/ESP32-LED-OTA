@@ -78,6 +78,9 @@ void fadeToWhiteBrightness(uint8_t targetBrightness, unsigned long duration) {
   int delta = targetBrightness - start;
   unsigned long startTime = millis();
 
+  void performOTA(const char* binURL);
+
+
   while (millis() - startTime < duration) {
     float progress = float(millis() - startTime) / duration;
     int current = start + delta * progress;
