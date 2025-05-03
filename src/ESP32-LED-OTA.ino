@@ -156,7 +156,7 @@ void handleOTAUpdate() {
     return;
   }
 
-  StaticJsonDocument doc(2048);
+  StaticJsonDocument<2048> doc;
   DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
 
@@ -199,7 +199,7 @@ void checkForOTAUpdate() {
     return;
   }
 
-  StaticJsonDocument doc(2048);
+  StaticJsonDocument<2048> doc;
   DeserializationError error = deserializeJson(doc, http.getStream());
   http.end();
 
