@@ -114,7 +114,7 @@ void fetchSunsetHour() {
     http.begin(client, "https://api.sunrise-sunset.org/json?lat=59.3293&lng=18.0686&formatted=0");
     int code = http.GET();
     if (code == 200) {
-      StaticJsonDocument doc(1024);
+      StaticJsonDocument<1024> doc;
       deserializeJson(doc, http.getString());
       String sunset = doc["results"]["sunset"];
       int hourUTC = sunset.substring(11, 13).toInt();
@@ -156,7 +156,7 @@ void handleOTAUpdate() {
     return;
   }
 
-  DynamicJsonDocument doc(2048);
+  StaticJsonDocument doc(2048);
   DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
 
@@ -199,7 +199,7 @@ void checkForOTAUpdate() {
     return;
   }
 
-  DynamicJsonDocument doc(2048);
+  StaticJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, http.getStream());
   http.end();
 
