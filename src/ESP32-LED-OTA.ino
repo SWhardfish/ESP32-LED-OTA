@@ -21,7 +21,7 @@ unsigned long fadeDurationOn = 2000;   // 2 seconds
 unsigned long fadeDurationOff = 30000; // 30 seconds
 unsigned long lastMotionTime = 0;
 const unsigned long holdTime = 300000;
-
+//x
 #ifndef VERSION_TAG
 #define VERSION_TAG "unknown"
 #endif
