@@ -43,7 +43,8 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+
 
       # 6. Upload firmware.bin to the release
       - name: Upload firmware.bin to Release
