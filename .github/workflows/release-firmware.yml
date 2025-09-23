@@ -1,5 +1,8 @@
 name: Build and Release ESP32-S3 Firmware
 
+permissions:
+  contents: write   # allows creating releases
+
 # Trigger only on version tags (v1.0.0, v2.3.4, etc.)
 on:
   push:
