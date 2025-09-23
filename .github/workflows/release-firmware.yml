@@ -1,9 +1,8 @@
 name: Build and Release ESP32-S3 Firmware
 
 permissions:
-  contents: write   # allows creating releases
+  contents: write
 
-# Trigger only on version tags (v1.0.0, v2.3.4, etc.)
 on:
   push:
     tags:
@@ -15,42 +14,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # 3. Install PlatformIO
       - name: Install PlatformIO
         run: pip install -U platformio
 
-      # 4. Build firmware
       - name: Build firmware
         run: pio run -e esp32-s3-zero
 
-      # 5. Create GitHub Release
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Install GitHub CLI
+        run: sudo apt update && sudo apt install gh -y
 
+      - name: Authenticate GitHub CLI
+        run: gh auth login --with-token <<< "${{ secrets.PAT_TOKEN }}"
 
-      # 6. Upload firmware.bin to the release
-      - name: Upload firmware.bin to Release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: .pio/build/esp32-s3-zero/firmware.bin
-          asset_name: firmware.bin
-          asset_content_type: application/octet-stream
+      - name: Create Release and Upload Firmware
+        run: |
+          gh release create ${{ github.ref_name }} .pio/build/esp32-s3-zero/firmware.bin \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "Automated build of ESP32-S3 firmware"
