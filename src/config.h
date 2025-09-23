@@ -13,6 +13,7 @@
 
 // Hardware configuration
 #define FIRMWARE_VERSION "1.0.2"
+#define LED_TYPE NEO_GRBW + NEO_KHZ800
 #define LED_PIN 6
 #define NUM_LEDS 61
 #define PIR_PIN 7

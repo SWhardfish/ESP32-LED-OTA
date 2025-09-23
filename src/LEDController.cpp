@@ -1,114 +1,49 @@
 #include "LEDController.h"
-#include "config.h"
 
-LightModeConfig currentMode;
-unsigned long lastMotionTime = 0;
+LEDController::LEDController(uint8_t pin, uint16_t count)
+: strip(count, pin, NEO_RGBW + NEO_KHZ800) {
+  savedR = 0; savedG = 0; savedB = 0; savedW = 255; // default white only
+}
 
-void setupLEDController() {
-  pinMode(PIR_PIN, INPUT);
+void LEDController::begin() {
   strip.begin();
   strip.show();
-
-  // Initialize with low mode settings
-  currentMode = scheduleConfig.lowMode;
-  setLEDs(currentMode);
 }
 
-void setLEDs(const LightModeConfig& mode) {
-  uint8_t r = 0, g = 0, b = 0, w = 0;
-
-  if (mode.colorEnabled) {
-    r = (mode.color >> 16) & 0xFF;
-    g = (mode.color >> 8) & 0xFF;
-    b = mode.color & 0xFF;
-  }
-
-  if (mode.whiteEnabled) {
-    w = mode.white;
-  }
-
-  // For SK6812 (GRBW)
-  uint32_t color = strip.Color(g, r, b, w);
-
-  strip.setBrightness(mode.brightness);
-  for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, color);
+void LEDController::setAll(uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
+  savedR = r; savedG = g; savedB = b; savedW = w;
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(r, g, b, w));
   }
   strip.show();
 }
 
-void fadeToTarget(const LightModeConfig& target, unsigned long duration) {
-  if (duration == 0) {
-    setLEDs(target);
-    return;
+void LEDController::setBrightness(uint8_t level) {
+  uint8_t r = (uint8_t)((level / 255.0) * savedR);
+  uint8_t g = (uint8_t)((level / 255.0) * savedG);
+  uint8_t b = (uint8_t)((level / 255.0) * savedB);
+  uint8_t w = (uint8_t)((level / 255.0) * savedW);
+
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(r, g, b, w));
   }
-
-  LightModeConfig start = currentMode;
-  unsigned long startTime = millis();
-
-  while (millis() - startTime < duration) {
-    float progress = float(millis() - startTime) / duration;
-    if (progress > 1.0) progress = 1.0;
-
-    LightModeConfig intermediate;
-    intermediate.brightness = start.brightness + (target.brightness - start.brightness) * progress;
-    intermediate.white = start.white + (target.white - start.white) * progress;
-
-    // Only fade color if both modes have color enabled
-    if (start.colorEnabled && target.colorEnabled) {
-      intermediate.colorEnabled = true;
-      uint8_t startR = (start.color >> 16) & 0xFF;
-      uint8_t startG = (start.color >> 8) & 0xFF;
-      uint8_t startB = start.color & 0xFF;
-
-      uint8_t targetR = (target.color >> 16) & 0xFF;
-      uint8_t targetG = (target.color >> 8) & 0xFF;
-      uint8_t targetB = target.color & 0xFF;
-
-      uint8_t interR = startR + (targetR - startR) * progress;
-      uint8_t interG = startG + (targetG - startG) * progress;
-      uint8_t interB = startB + (targetB - startB) * progress;
-
-      intermediate.color = (interR << 16) | (interG << 8) | interB;
-    } else {
-      intermediate.colorEnabled = target.colorEnabled;
-      intermediate.color = target.color;
-    }
-
-    intermediate.whiteEnabled = target.whiteEnabled;
-    setLEDs(intermediate);
-    delay(20);
-  }
-
-  setLEDs(target);
-  currentMode = target;
+  strip.show();
 }
 
-void handleMotionDetection(bool motionDetected) {
-  if (motionDetected) {
-    lastMotionTime = millis();
-    if (!(currentMode.brightness == scheduleConfig.highMode.brightness &&
-          currentMode.color == scheduleConfig.highMode.color &&
-          currentMode.white == scheduleConfig.highMode.white)) {
-      logEvent("Motion detected - switching to high mode");
-      fadeToTarget(scheduleConfig.highMode, scheduleConfig.fadeDurationOn);
-    }
-  } else if (millis() - lastMotionTime > scheduleConfig.holdTime) {
-    // Handle timeout
-  }
-}
+void LEDController::testCycle(unsigned long onMs, unsigned long offMs, unsigned long pauseMs) {
+  struct Color { uint8_t r, g, b, w; };
+  Color colors[] = {
+    {255, 0, 0, 0},   // Red
+    {0, 255, 0, 0},   // Green
+    {0, 0, 255, 0},   // Blue
+    {0, 0, 0, 255}    // White
+  };
 
-void handleSchedule(bool isOnSchedule) {
-  // This would be called from main loop with schedule state
-  if (isOnSchedule && currentMode.brightness == 0) {
-    fadeToTarget(scheduleConfig.lowMode, scheduleConfig.fadeDurationOn);
-  } else if (!isOnSchedule && currentMode.brightness > 0) {
-    LightModeConfig offMode;
-    offMode.brightness = 0;
-    offMode.color = 0;
-    offMode.white = 0;
-    offMode.colorEnabled = false;
-    offMode.whiteEnabled = false;
-    fadeToTarget(offMode, scheduleConfig.fadeDurationOff);
+  for (auto &c : colors) {
+    setAll(c.r, c.g, c.b, c.w);
+    delay(onMs);
+    setAll(0, 0, 0, 0);
+    delay(offMs);
   }
+  delay(pauseMs);
 }

@@ -1,48 +1,33 @@
-name: Build ESP32 Firmware
+name: Build ESP32-S3 Firmware
 
 on:
   push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write  # Required to create releases and upload files
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Version from Tag
-        id: extract_version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build Firmware
-        run: |
-          echo "VERSION=${VERSION}"  # Optional: debug output
-          platformio run --environment esp32dev
-        env:
-          VERSION: ${{ env.VERSION }}
+      - name: Build firmware
+        run: pio run
 
-      - name: Rename Firmware for OTA
-        run: cp .pio/build/esp32dev/firmware.bin ESP32-LED-OTA.bin
-
-      - name: Upload Firmware as Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref }}
-          name: Firmware ${{ github.ref }}
-          body: Auto-built firmware from tag.
-          files: |
-            .pio/build/esp32dev/firmware.bin
-            ESP32-LED-OTA.bin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: esp32-s3-firmware
+          path: .pio/build/esp32-s3-zero/firmware.bin

@@ -1,146 +1,95 @@
-#include <WiFi.h>
-#include <LittleFS.h>
-#include <Update.h>
-#include "config.h"
-#include "WiFiManager.h"
 #include "LEDController.h"
-#include "WebServerHandler.h"
-#include "WiFiManager.h"
-#include "ScheduleManager.h"
+#include "InputManager.h"
 
-Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
-ScheduleConfig scheduleConfig;
-String logBuffer[LOG_BUFFER_SIZE];
-int logIndex = 0;
-WebServer server(80);
-DNSServer dnsServer;
-WiFiConfig wifiConfig;
+// --- Pin definitions ---
+#define LED_PIN     6      // SK6812 data pin
+#define LED_COUNT   2      // two LEDs in test rig
+#define BUTTON_PIN  8      // button to 3.3V (with internal pulldown)
 
-void logEvent(String event) {
-  time_t now = time(nullptr);
-  struct tm* ptm = localtime(&now);
-  char timeStr[9];
-  sprintf(timeStr, "%02d:%02d:%02d", ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
+// --- Global objects ---
+LEDController leds(LED_PIN, LED_COUNT);
+InputManager button(BUTTON_PIN);
 
-  String entry = String(timeStr) + " - " + event;
-  logBuffer[logIndex] = entry;
-  logIndex = (logIndex + 1) % LOG_BUFFER_SIZE;
+// --- State machine variables ---
+enum State {OFF, FADING_IN, ON, FADING_OUT};
+State state = OFF;
 
-  Serial.println(entry);
-}
+unsigned long stateStart = 0;
+const int fadeInDuration  = 2000;   // ms
+const int fadeOutDuration = 10000;  // ms
+const int holdTimeMs      = 5000;   // ms
+
+// --- Track whether we're in test mode ---
+bool testMode = false;
 
 void setup() {
-  Serial.begin(115200);
-  logEvent("System starting - Firmware version " + String(FIRMWARE_VERSION));
+  leds.begin();
+  button.begin();
 
-  // Print chip information
-  esp_chip_info_t chip_info;
-  esp_chip_info(&chip_info);
-  logEvent("ESP32 Chip Model: " + String(chip_info.model));
-  logEvent("ESP32 Cores: " + String(chip_info.cores));
-  logEvent("ESP32 Revision: " + String(chip_info.revision));
-  logEvent("Flash Size: " + String(spi_flash_get_chip_size() / (1024 * 1024)) + "MB");
-  logEvent("Free Heap: " + String(esp_get_free_heap_size()) + " bytes");
-
-  // Initialize filesystem
-  if (!LittleFS.begin(true)) {
-    logEvent("Failed to mount LittleFS, formatting...");
-    if (!LittleFS.format()) {
-      logEvent("LittleFS format failed!");
-      delay(1000);
-      ESP.restart();
-    }
-    if (!LittleFS.begin(true)) {
-      logEvent("LittleFS still not working after format!");
-      delay(1000);
-      ESP.restart();
-    }
-  }
-  logEvent("LittleFS mounted successfully");
-
-  // Try to load config and connect to WiFi
-  if (!loadWiFiConfig()) {
-    logEvent("No WiFi config found, starting config portal");
-    startConfigPortal();
-  } else if (!connectWiFi()) {
-    logEvent("WiFi connection failed, starting config portal");
-    startConfigPortal();
-  } else {
-    // Initialize components
-    setupScheduleManager();
-    setupLEDController();
-    setupWebServer();
-    logEvent("System initialization complete");
-
-    // Check for firmware update
-    if (LittleFS.exists("/update.bin")) {
-      logEvent("Found update.bin, attempting firmware update...");
-      File updateFile = LittleFS.open("/update.bin", "r");
-
-      if (updateFile) {
-        size_t updateSize = updateFile.size();
-
-        if (Update.begin(updateSize)) {
-          size_t written = Update.writeStream(updateFile);
-
-          if (written == updateSize) {
-            logEvent("Update successfully written, " + String(written) + " bytes");
-
-            if (Update.end()) {
-              logEvent("OTA update complete, rebooting...");
-              updateFile.close();
-              LittleFS.remove("/update.bin");
-              delay(1000);
-              ESP.restart();
-            } else {
-              logEvent("Error ending OTA update: " + String(Update.getError()));
-            }
-          } else {
-            logEvent("OTA write failed, expected " + String(updateSize) +
-                    ", written " + String(written));
-          }
-        } else {
-          logEvent("OTA begin failed: " + String(Update.getError()));
-        }
-
-        updateFile.close();
-      } else {
-        logEvent("Failed to open update.bin");
-      }
-    }
+  // Check for test mode at startup: hold button HIGH at boot
+  delay(50); // settle input
+  if (digitalRead(BUTTON_PIN) == HIGH) {
+    testMode = true;
   }
 }
 
 void loop() {
-  server.handleClient();
-  dnsServer.processNextRequest();
-
-  static unsigned long lastScheduleCheck = 0;
-  static bool lastScheduleState = false;
-
-  // Check schedule every minute
-  if (millis() - lastScheduleCheck > 60000) {
-    bool currentScheduleState = isOnSchedule();
-
-    if (currentScheduleState != lastScheduleState) {
-      logEvent(currentScheduleState ? "Entering scheduled on period" : "Leaving scheduled on period");
-      lastScheduleState = currentScheduleState;
-    }
-
-    lastScheduleCheck = millis();
+  if (testMode) {
+    // --- RGBW wiring test cycle ---
+    leds.testCycle();
+    return; // never reach state machine
   }
 
-  // Handle motion detection
-  bool motionDetected = digitalRead(PIR_PIN);
-  handleMotionDetection(motionDetected);
+  // --- Update button state ---
+  button.update();
+  unsigned long now = millis();
 
-  // Handle schedule-based lighting
-  handleSchedule(lastScheduleState);
+  // --- Button press detection ---
+  if (button.wasPressed()) {
+    if (state == OFF) {
+      state = FADING_IN;
+      stateStart = now;
+    } else if (state == ON) {
+      stateStart = now; // restart hold timer
+    } else if (state == FADING_OUT) {
+      state = ON; // cancel fade out
+      stateStart = now;
+    }
+  }
 
-  // Other periodic tasks can go here
-  static unsigned long lastHeapLog = 0;
-  if (millis() - lastHeapLog > 300000) { // Every 5 minutes
-    logEvent("Free heap: " + String(esp_get_free_heap_size()) + " bytes");
-    lastHeapLog = millis();
+  // --- State machine ---
+  switch (state) {
+    case OFF:
+      leds.setBrightness(0);
+      break;
+
+    case FADING_IN: {
+      float progress = (float)(now - stateStart) / fadeInDuration;
+      if (progress >= 1.0f) {
+        progress = 1.0f;
+        state = ON;
+        stateStart = now;
+      }
+      leds.setBrightness((int)(progress * 255));
+      break;
+    }
+
+    case ON:
+      leds.setBrightness(255);
+      if (now - stateStart >= holdTimeMs) {
+        state = FADING_OUT;
+        stateStart = now;
+      }
+      break;
+
+    case FADING_OUT: {
+      float progress = (float)(now - stateStart) / fadeOutDuration;
+      if (progress >= 1.0f) {
+        progress = 1.0f;
+        state = OFF;
+      }
+      leds.setBrightness((int)((1.0f - progress) * 255));
+      break;
+    }
   }
 }
