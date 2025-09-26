@@ -4,7 +4,7 @@
 #include "LedIndicator.h"
 #include "esp_wifi.h"   // <-- Needed for esp_wifi_set_ps
 
-extern LedIndicator led; // Main instantiates; or inject dependency
+extern LedIndicator led; // Main instantiates
 
 static WebServer server(80);
 
