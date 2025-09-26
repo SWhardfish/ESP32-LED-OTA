@@ -1,95 +1,75 @@
-#include "LEDController.h"
-#include "InputManager.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <LittleFS.h>
+#include "LedIndicator.h"
+#include "WifiManager.h"
+#include "OtaManager.h"
+#include "WebFiles.h"
 
-// --- Pin definitions ---
-#define LED_PIN     6      // SK6812 data pin
-#define LED_COUNT   2      // two LEDs in test rig
-#define BUTTON_PIN  8      // button to 3.3V (with internal pulldown)
+// choose GPIO21 for onboard LED per your request
+#define LED_GPIO 21
 
-// --- Global objects ---
-LEDController leds(LED_PIN, LED_COUNT);
-InputManager button(BUTTON_PIN);
-
-// --- State machine variables ---
-enum State {OFF, FADING_IN, ON, FADING_OUT};
-State state = OFF;
-
-unsigned long stateStart = 0;
-const int fadeInDuration  = 2000;   // ms
-const int fadeOutDuration = 10000;  // ms
-const int holdTimeMs      = 5000;   // ms
-
-// --- Track whether we're in test mode ---
-bool testMode = false;
+LedIndicator led(LED_GPIO);
+WifiManager wifiManager;
+WebServer server(80);
+OtaManager ota(&server);
 
 void setup() {
-  leds.begin();
-  button.begin();
+  Serial.begin(115200);
+  delay(100);
 
-  // Check for test mode at startup: hold button HIGH at boot
-  delay(50); // settle input
-  if (digitalRead(BUTTON_PIN) == HIGH) {
-    testMode = true;
+  // LittleFS
+  if(!LittleFS.begin()){
+    Serial.println("LittleFS mount failed");
   }
+
+  led.begin();
+  led.setState(LED_CONNECTING);
+
+  wifiManager.begin();
+
+  // connection callback to update LED
+  wifiManager.onConnectionChanged([](bool connected) {
+    if (connected) {
+      led.setState(LED_CONNECTED);
+    } else {
+      led.setState(LED_CONNECTING);
+    }
+  });
+
+  bool ok = wifiManager.tryConnectSaved();
+  if (!ok) {
+    // start AP mode for configuration
+    wifiManager.startConfigPortal();
+    led.setState(LED_CONNECTING);
+  } else {
+    led.setState(LED_CONNECTED);
+  }
+
+  // setup server endpoints (serves index.html)
+  server.on("/", HTTP_GET, []() {
+    server.sendHeader("Cache-Control", "no-store");
+    // prefer serving LittleFS file if available:
+    if (LittleFS.exists("/index.html")) {
+      File f = LittleFS.open("/index.html", "r");
+      server.streamFile(f, "text/html");
+      f.close();
+    } else {
+      server.send(200, "text/html", WebFiles::index_html());
+    }
+  });
+
+  // let WifiManager also handle /save saving earlier (it uses the same global server in WifiManager.cpp)
+  // but our WifiManager used its own server instance in that code; for a single server approach, adapt as needed.
+  // We'll also attach ota endpoints to this server
+  ota.begin();
+  server.begin();
 }
 
 void loop() {
-  if (testMode) {
-    // --- RGBW wiring test cycle ---
-    leds.testCycle();
-    return; // never reach state machine
-  }
-
-  // --- Update button state ---
-  button.update();
-  unsigned long now = millis();
-
-  // --- Button press detection ---
-  if (button.wasPressed()) {
-    if (state == OFF) {
-      state = FADING_IN;
-      stateStart = now;
-    } else if (state == ON) {
-      stateStart = now; // restart hold timer
-    } else if (state == FADING_OUT) {
-      state = ON; // cancel fade out
-      stateStart = now;
-    }
-  }
-
-  // --- State machine ---
-  switch (state) {
-    case OFF:
-      leds.setBrightness(0);
-      break;
-
-    case FADING_IN: {
-      float progress = (float)(now - stateStart) / fadeInDuration;
-      if (progress >= 1.0f) {
-        progress = 1.0f;
-        state = ON;
-        stateStart = now;
-      }
-      leds.setBrightness((int)(progress * 255));
-      break;
-    }
-
-    case ON:
-      leds.setBrightness(255);
-      if (now - stateStart >= holdTimeMs) {
-        state = FADING_OUT;
-        stateStart = now;
-      }
-      break;
-
-    case FADING_OUT: {
-      float progress = (float)(now - stateStart) / fadeOutDuration;
-      if (progress >= 1.0f) {
-        progress = 1.0f;
-        state = OFF;
-      }
-      leds.setBrightness((int)((1.0f - progress) * 255));
-      break;
-    }
-  }
+  led.loop();
+  ota.handle();
+  server.handleClient();
+  delay(1);
 }
