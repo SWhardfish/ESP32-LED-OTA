@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "LedStatus.h"
 #include "WifiManager.h"
+#include "LittleFS.h"
 
 LedStatus led;
 WifiManager wifi;

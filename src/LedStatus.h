@@ -1,6 +1,7 @@
 // LedStatus.h
 #pragma once
 #include <Adafruit_NeoPixel.h>
+#include "LittleFS.h"
 
 class LedStatus {
 public:

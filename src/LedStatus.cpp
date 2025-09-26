@@ -1,5 +1,7 @@
 // LedStatus.cpp
 #include "LedStatus.h"
+#include "LittleFS.h"
+
 
 LedStatus::LedStatus(uint8_t pin, uint8_t brightness)
 : strip(1, pin, NEO_GRB + NEO_KHZ800) {
