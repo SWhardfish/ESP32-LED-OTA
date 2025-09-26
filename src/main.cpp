@@ -1,4 +1,4 @@
-//main.
+//main.cpp main code
 #include <Arduino.h>
 #include "LedStatus.h"
 #include "WifiManager.h"
