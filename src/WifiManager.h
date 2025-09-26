@@ -1,34 +1,10 @@
-#ifndef WIFIMANAGER_H
-#define WIFIMANAGER_H
-
-#include <Arduino.h>
+// WifiManager.h
+#pragma once
 #include <WiFi.h>
-#include <Preferences.h>
-
-typedef std::function<void(bool connected)> WifiCallback;
 
 class WifiManager {
 public:
-    WifiManager();
     void begin();
-    bool tryConnectSaved();
-    void startConfigPortal();
-    void stopConfigPortal();
     void loop();
-
-    void onConnectionChanged(WifiCallback cb);
-
-    void saveCredentials(const String &ssid, const String &password);
-
-private:
-    void loadCredentials();
-    void saveCredentialsInternal();
-
-    String _ssid;
-    String _password;
-    bool _connected;
-    WifiCallback _cb;
-    unsigned long _connectStart;
+    bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
 };
-
-#endif // WIFIMANAGER_H
