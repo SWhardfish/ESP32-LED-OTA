@@ -8,7 +8,7 @@ static String ssid, pass;
 
 static void handleRoot() {
     String html =
-        "<form action='/save' method='POST'>"
+        "/save"
         "SSID:<input name='ssid'><br>"
         "Password:<input name='pass' type='password'><br>"
         "<input type='submit'></form>";
@@ -34,13 +34,12 @@ static void handleSave() {
 void WifiManager::begin() {
     LittleFS.begin();
 
-    // Always start in station mode first
     WiFi.mode(WIFI_STA);
 
     if (LittleFS.exists("/wifi.json")) {
         File f = LittleFS.open("/wifi.json", "r");
         DynamicJsonDocument doc(128);
-        if (!deserializeJson(doc, f)) {
+        if (deserializeJson(doc, f) == DeserializationError::Ok) {
             ssid = doc["ssid"].as<String>();
             pass = doc["pass"].as<String>();
         }
@@ -49,26 +48,26 @@ void WifiManager::begin() {
         if (ssid.length()) {
             WiFi.begin(ssid.c_str(), pass.c_str());
 
-            // try for up to 10 seconds
             unsigned long start = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
                 delay(250);
             }
             if (WiFi.status() == WL_CONNECTED) {
                 Serial.println("Connected to WiFi");
+                if (onStatusChange) onStatusChange(true);
                 return;
             }
             Serial.println("WiFi connect failed, starting AP mode");
         }
     }
 
-    // fallback to AP mode
     WiFi.mode(WIFI_AP);
     WiFi.softAP("ESP32S3_Setup");
     server.on("/", handleRoot);
     server.on("/save", HTTP_POST, handleSave);
     server.begin();
     Serial.println("AP mode started: connect to SSID 'ESP32S3_Setup'");
+    if (onStatusChange) onStatusChange(false);
 }
 
 void WifiManager::loop() {

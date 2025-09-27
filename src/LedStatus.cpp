@@ -24,7 +24,7 @@ void LedStatus::flashRed() {
 void LedStatus::loop() {
     if (!flashing) return;
     unsigned long now = millis();
-    if (now - lastToggle >= 1000) {      // 1 s blink
+    if (now - lastToggle >= 1000) { // 1 s blink
         lastToggle = now;
         ledOn = !ledOn;
         strip.setPixelColor(0, ledOn ? strip.Color(255, 0, 0) : 0);

@@ -1,23 +1,25 @@
-#include <Arduino.h>
 #include "LedStatus.h"
 #include "WifiManager.h"
 
-LedStatus   led;   // onboard WS2812 on GPIO 21
+LedStatus led;
 WifiManager wifi;
 
 void setup() {
     Serial.begin(115200);
     led.begin();
+
+    wifi.onStatusChange =  {
+        if (connected) {
+            led.setColor(0, 255, 0);  // steady green
+        } else {
+            led.flashRed();          // flashing red
+        }
+    };
+
     wifi.begin();
 }
 
 void loop() {
     wifi.loop();
-
-    if (wifi.isConnected()) {
-        led.setColor(0, 255, 0);   // steady green
-    } else {
-        led.flashRed();           // slow blinking red
-    }
     led.loop();
 }
