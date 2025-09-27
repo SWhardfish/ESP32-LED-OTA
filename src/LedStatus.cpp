@@ -1,16 +1,14 @@
-// LedStatus.cpp
 #include "LedStatus.h"
-#include "LittleFS.h"
-
 
 LedStatus::LedStatus(uint8_t pin, uint8_t brightness)
-: strip(1, pin, NEO_GRB + NEO_KHZ800) {
+    : strip(1, pin, NEO_GRB + NEO_KHZ800)
+{
     strip.setBrightness(brightness);
 }
 
 void LedStatus::begin() {
     strip.begin();
-    strip.show();
+    strip.show(); // start off
 }
 
 void LedStatus::setColor(uint8_t r, uint8_t g, uint8_t b) {
@@ -26,7 +24,7 @@ void LedStatus::flashRed() {
 void LedStatus::loop() {
     if (!flashing) return;
     unsigned long now = millis();
-    if (now - lastToggle > 1000) {        // 1 s blink
+    if (now - lastToggle >= 1000) {      // 1 s blink
         lastToggle = now;
         ledOn = !ledOn;
         strip.setPixelColor(0, ledOn ? strip.Color(255, 0, 0) : 0);

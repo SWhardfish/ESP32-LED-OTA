@@ -1,8 +1,5 @@
-// WifiManager.h
 #pragma once
 #include <WiFi.h>
-#include "LittleFS.h"
-
 
 class WifiManager {
 public:
