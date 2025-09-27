@@ -8,6 +8,7 @@ void setup() {
     Serial.begin(115200);
     led.begin();
 
+    // Correct lambda assignment to std::function
     wifi.onStatusChange =  {
         if (connected) {
             led.setColor(0, 255, 0);  // steady green
