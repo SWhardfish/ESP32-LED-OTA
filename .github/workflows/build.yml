@@ -23,15 +23,16 @@ jobs:
       - name: Install PlatformIO + esptool
         run: |
           pip install --upgrade platformio esptool
-          python -m esptool --version
+          # v5: use the subcommand, not --version
+          esptool version
 
       - name: Build (PlatformIO)
         run: pio run -e esp32-s3-zero
 
-      # Create a single "factory" image like Arduino does under the hood
-      # Offsets are standard for ESP32-S3 (bootloader, partitions, boot_app0, app)
       - name: Merge images -> one firmware file at 0x0
         run: |
+          # Standard ESP32-S3 offsets; align with Arduino/ESP-IDF upload layout
+          # bootloader@0x0, partitions@0x8000, boot_app0@0xE000, app@0x10000
           python -m esptool --chip esp32s3 merge_bin \
             -o .pio/build/esp32-s3-zero/firmware-merged.bin \
             --flash_mode qio --flash_freq 80m --flash_size 4MB \
