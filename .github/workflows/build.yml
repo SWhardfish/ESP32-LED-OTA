@@ -1,4 +1,4 @@
-name: Build ESP32-S3 Firmware
+name: Build ESP32-S3 (single merged factory image)
 
 on:
   push:
@@ -12,29 +12,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
-      - name: Install PlatformIO
-        run: pip install platformio
+      - name: Install PlatformIO + esptool
+        run: |
+          pip install --upgrade platformio esptool
+          python -m esptool --version
 
-      - name: Build firmware
-        run: pio run -e esp32-s3
+      - name: Build (PlatformIO)
+        run: pio run -e esp32-s3-zero
 
+      # Create a single "factory" image like Arduino does under the hood
+      # Offsets are standard for ESP32-S3 (bootloader, partitions, boot_app0, app)
+      - name: Merge images -> one firmware file at 0x0
+        run: |
+          python -m esptool --chip esp32s3 merge_bin \
+            -o .pio/build/esp32-s3-zero/firmware-merged.bin \
+            --flash_mode qio --flash_freq 80m --flash_size 4MB \
+            0x0     .pio/build/esp32-s3-zero/bootloader.bin \
+            0x8000  .pio/build/esp32-s3-zero/partitions.bin \
+            0xE000  .pio/build/esp32-s3-zero/boot_app0.bin \
+            0x10000 .pio/build/esp32-s3-zero/firmware.bin
 
-      - name: Upload firmware artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-s3-images
+          name: esp32-s3-zero-images
           path: |
-            .pio/build/esp32-s3/bootloader.bin
-            .pio/build/esp32-s3/partitions.bin
-            .pio/build/esp32-s3/boot_app0.bin
-            .pio/build/esp32-s3/firmware.bin
-      
-
+            .pio/build/esp32-s3-zero/bootloader.bin
+            .pio/build/esp32-s3-zero/partitions.bin
+            .pio/build/esp32-s3-zero/boot_app0.bin
+            .pio/build/esp32-s3-zero/firmware.bin
+            .pio/build/esp32-s3-zero/firmware-merged.bin
