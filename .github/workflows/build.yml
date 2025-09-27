@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PIO_ENV: esp32-s3-zero   # <-- must match your [env:...] name in platformio.ini
 
     steps:
       - name: Checkout
@@ -23,31 +25,51 @@ jobs:
       - name: Install PlatformIO + esptool
         run: |
           pip install --upgrade platformio esptool
-          # v5: use the subcommand, not --version
-          esptool version
+          esptool version   # v5 syntax; don't use --version
 
       - name: Build (PlatformIO)
-        run: pio run -e esp32-s3-zero
+        run: pio run -e $PIO_ENV
 
       - name: Merge images -> one firmware file at 0x0
+        shell: bash
         run: |
-          # Standard ESP32-S3 offsets; align with Arduino/ESP-IDF upload layout
-          # bootloader@0x0, partitions@0x8000, boot_app0@0xE000, app@0x10000
-          python -m esptool --chip esp32s3 merge_bin \
-            -o .pio/build/esp32-s3-zero/firmware-merged.bin \
-            --flash_mode qio --flash_freq 80m --flash_size 4MB \
-            0x0     .pio/build/esp32-s3-zero/bootloader.bin \
-            0x8000  .pio/build/esp32-s3-zero/partitions.bin \
-            0xE000  .pio/build/esp32-s3-zero/boot_app0.bin \
-            0x10000 .pio/build/esp32-s3-zero/firmware.bin
+          set -euo pipefail
+          BUILD_DIR=".pio/build/${PIO_ENV}"
+
+          BOOTLOADER="${BUILD_DIR}/bootloader.bin"
+          PARTITIONS="${BUILD_DIR}/partitions.bin"
+          APPBIN="${BUILD_DIR}/firmware.bin"
+
+          # boot_app0.bin may not be produced in BUILD_DIR by PIO; find a fallback in packages
+          BOOTAPP0="${BUILD_DIR}/boot_app0.bin"
+          if [[ ! -f "$BOOTAPP0" ]]; then
+            BOOTAPP0="$(find ~/.platformio/packages -type f -name 'boot_app0.bin' | head -n 1 || true)"
+          fi
+
+          echo "Resolved files:"
+          ls -l "$BOOTLOADER" "$PARTITIONS" "$APPBIN"
+          if [[ -n "${BOOTAPP0:-}" && -f "$BOOTAPP0" ]]; then
+            echo "Using boot_app0.bin: $BOOTAPP0"
+          else
+            echo "ERROR: boot_app0.bin not found"; exit 1
+          fi
+
+          # Create single merged image with standard ESP32-S3 offsets
+          python -m esptool --chip esp32s3 merge-bin \
+            --flash-mode qio --flash-freq 80m --flash-size 4MB \
+            -o "${BUILD_DIR}/firmware-merged.bin" \
+            0x0     "$BOOTLOADER" \
+            0x8000  "$PARTITIONS" \
+            0xE000  "$BOOTAPP0" \
+            0x10000 "$APPBIN"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp32-s3-zero-images
           path: |
-            .pio/build/esp32-s3-zero/bootloader.bin
-            .pio/build/esp32-s3-zero/partitions.bin
-            .pio/build/esp32-s3-zero/boot_app0.bin
-            .pio/build/esp32-s3-zero/firmware.bin
-            .pio/build/esp32-s3-zero/firmware-merged.bin
+            .pio/build/${{ env.PIO_ENV }}/bootloader.bin
+            .pio/build/${{ env.PIO_ENV }}/partitions.bin
+            .pio/build/${{ env.PIO_ENV }}/boot_app0.bin
+            .pio/build/${{ env.PIO_ENV }}/firmware.bin
+            .pio/build/${{ env.PIO_ENV }}/firmware-merged.bin
