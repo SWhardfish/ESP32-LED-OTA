@@ -17,11 +17,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # so we can print the real HEAD cleanly
+          fetch-depth: 0  # show real HEAD
 
-      # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-      # Diagnostics to verify what the runner is actually building
-      - name: Diagnostics show repo state and main.cpp
+      # --- DIAGNOSTICS: See exactly what CI is building ---
+      - name: Diagnostics: show repo state and main.cpp
         shell: bash
         run: |
           set -euo pipefail
@@ -30,27 +29,33 @@ jobs:
           git --no-pager log -1 --oneline
           echo
 
-          echo "===== tree (top level) ====="
-          ls -la
+          echo "===== env ====="
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "PIO_ENV=${PIO_ENV}"
           echo
 
-          echo "===== PIO_ENV ====="
-          echo "PIO_ENV=${PIO_ENV}"
+          echo "===== file listing ====="
+          ls -la
           echo
 
           echo "===== platformio.ini (first 200 lines) ====="
           sed -n '1,200p' platformio.ini || true
           echo
 
+          echo "===== find any main.cpp in repo ====="
+          find . -type f -name 'main.cpp' -print
+          echo
+
           echo "===== src/main.cpp (first 120 lines, numbered) ====="
-          nl -ba src/main.cpp | sed -n '1,120p'
+          nl -ba src/main.cpp | sed -n '1,120p' || true
           echo
 
           echo "===== grep: onStatusChange in src/main.cpp ====="
           grep -n "onStatusChange" src/main.cpp || true
           echo
 
-          echo "===== grep: HTML entities in source ( &lt;  &gt;  &amp; ) ====="
+          echo "===== grep: HTML entities in src ( &lt;  &gt;  &amp; ) ====="
           grep -R --line-number -E '&lt;|&gt;|&amp;' src || echo "No HTML entities found in src/"
           echo
 
@@ -58,7 +63,31 @@ jobs:
           file src/main.cpp || true
           md5sum src/main.cpp || true
           echo
-      # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+      # --- GUARD: fail immediately if the lambda is missing and it's a brace block ---
+      - name: Guard check: ensure onStatusChange is a lambda
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE 'onStatusChange\s*=\s*\{' src/main.cpp; then
+            echo "::error ::Found 'onStatusChange = {' which is not a lambda. It must be 'onStatusChange =  {'"
+            exit 1
+          fi
+          echo "Guard OK: no brace-block assignment found."
+
+      # --- OPTIONAL HOTFIX: auto-rewrite the line to a lambda (uncomment to try) ---
+      # - name: HOTFIX: rewrite brace block to lambda
+      #   if: always()
+      #   shell: bash
+      #   run: |
+      #     set -euo pipefail
+      #     # Show before
+      #     echo "Before rewrite:"
+      #     nl -ba src/main.cpp | sed -n '1,80p'
+      #     # Replace any 'onStatusChange =  {' with a correct lambda
+      #     perl -0777 -i -pe 's/onStatusChange\s*=\s*\{([^\n]*)/onStatusChange =  {\1/' src/main.cpp
+      #     echo "After rewrite:"
+      #     nl -ba src/main.cpp | sed -n '1,80p'
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -72,7 +101,6 @@ jobs:
 
       - name: Build (PlatformIO)
         run: pio run -e $PIO_ENV
-
       - name: Merge images -> one firmware file at 0x0
         shell: bash
         run: |
