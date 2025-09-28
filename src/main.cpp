@@ -10,7 +10,7 @@ void setup() {
     Serial.begin(115200);
     led.begin();
 
-    // Correct lambda (no capture needed because 'led' is global)
+    // Correct lambda: introduce [] and take the bool parameter
     wifi.onStatusChange =  {
         if (connected) {
             led.setColor(0, 255, 0);  // steady green
@@ -26,3 +26,4 @@ void loop() {
     wifi.loop();
     led.loop();
 }
+
