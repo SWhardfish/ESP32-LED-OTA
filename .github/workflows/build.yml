@@ -65,7 +65,7 @@ jobs:
           echo
 
       # --- GUARD: fail immediately if the lambda is missing and it's a brace block ---
-      - name: Guard check: ensure onStatusChange is a lambda
+      - name: Guard check ensure onStatusChange is a lambda
         shell: bash
         run: |
           set -euo pipefail
