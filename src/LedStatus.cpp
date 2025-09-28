@@ -1,3 +1,5 @@
+//LedStatus.cpp
+#include <Arduino.h>
 #include "LedStatus.h"
 
 LedStatus::LedStatus(uint8_t pin, uint8_t brightness)
@@ -8,7 +10,7 @@ LedStatus::LedStatus(uint8_t pin, uint8_t brightness)
 
 void LedStatus::begin() {
     strip.begin();
-    strip.show(); // start off
+    strip.show(); // turn off initially
 }
 
 void LedStatus::setColor(uint8_t r, uint8_t g, uint8_t b) {

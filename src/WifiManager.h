@@ -1,3 +1,4 @@
+//WifiManager.h
 #pragma once
 #include <WiFi.h>
 #include <functional>
@@ -11,3 +12,4 @@ public:
     // Callback to notify connection status
     std::function<void(bool connected)> onStatusChange;
 };
+

@@ -1,3 +1,4 @@
+//LedStatus.h
 #pragma once
 #include <Adafruit_NeoPixel.h>
 
@@ -14,3 +15,4 @@ private:
     unsigned long lastToggle = 0;
     bool ledOn = false;
 };
+
