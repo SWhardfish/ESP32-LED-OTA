@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0  # show real HEAD
 
       # --- DIAGNOSTICS: See exactly what CI is building ---
-      - name: Diagnostics: show repo state and main.cpp
+      - name: Diagnostics show repo state and main.cpp
         shell: bash
         run: |
           set -euo pipefail
