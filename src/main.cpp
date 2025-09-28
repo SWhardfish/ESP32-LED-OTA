@@ -1,3 +1,4 @@
+//main.cpp
 #include <Arduino.h>
 #include "LedStatus.h"
 #include "WifiManager.h"
@@ -9,8 +10,8 @@ void setup() {
     Serial.begin(115200);
     led.begin();
 
-    // Correct lambda assignment with parameter and capture
-    wifi.onStatusChange = & {
+    // Correct lambda (no capture needed because 'led' is global)
+    wifi.onStatusChange =  {
         if (connected) {
             led.setColor(0, 255, 0);  // steady green
         } else {
