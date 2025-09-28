@@ -21,7 +21,7 @@ jobs:
 
       # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
       # Diagnostics to verify what the runner is actually building
-      - name: Diagnostics: show repo state and main.cpp
+      - name: Diagnostics show repo state and main.cpp
         shell: bash
         run: |
           set -euo pipefail
