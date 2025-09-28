@@ -16,6 +16,49 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # so we can print the real HEAD cleanly
+
+      # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+      # Diagnostics to verify what the runner is actually building
+      - name: Diagnostics: show repo state and main.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "===== HEAD ====="
+          git rev-parse --abbrev-ref HEAD
+          git --no-pager log -1 --oneline
+          echo
+
+          echo "===== tree (top level) ====="
+          ls -la
+          echo
+
+          echo "===== PIO_ENV ====="
+          echo "PIO_ENV=${PIO_ENV}"
+          echo
+
+          echo "===== platformio.ini (first 200 lines) ====="
+          sed -n '1,200p' platformio.ini || true
+          echo
+
+          echo "===== src/main.cpp (first 120 lines, numbered) ====="
+          nl -ba src/main.cpp | sed -n '1,120p'
+          echo
+
+          echo "===== grep: onStatusChange in src/main.cpp ====="
+          grep -n "onStatusChange" src/main.cpp || true
+          echo
+
+          echo "===== grep: HTML entities in source ( &lt;  &gt;  &amp; ) ====="
+          grep -R --line-number -E '&lt;|&gt;|&amp;' src || echo "No HTML entities found in src/"
+          echo
+
+          echo "===== file type and md5 of src/main.cpp ====="
+          file src/main.cpp || true
+          md5sum src/main.cpp || true
+          echo
+      # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
       - name: Set up Python
         uses: actions/setup-python@v5
